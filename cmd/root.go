@@ -14,6 +14,8 @@ var RootCmd = &cobra.Command{
 	Short: "Snooze github notifications",
 }
 
+const CONCURRENCY = 10
+
 func csvName(org string) string {
 	return fmt.Sprintf("save-%s.csv", org)
 }

@@ -6,7 +6,7 @@ Snooze github notification for an entire org and re-watch them once you are read
 
 ```bash
 git clone
-glide install
+dep ensure
 ```
 
 ## Usage

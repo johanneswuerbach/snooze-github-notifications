@@ -1,6 +1,7 @@
 package cmd
 
 import (
+	"context"
 	"encoding/csv"
 	"log"
 	"os"
@@ -29,6 +30,8 @@ func init() {
 			var org = args[0]
 			log.Printf("Stop watching repos in org %s", org)
 
+			ctx := context.Background()
+
 			client := createGithubClient(token)
 
 			opt := &github.ListOptions{
@@ -37,7 +40,7 @@ func init() {
 			// get all pages of results
 			var filteredRepos []*github.Repository
 			for {
-				repos, resp, err := client.Activity.ListWatched("", opt)
+				repos, resp, err := client.Activity.ListWatched(ctx, "", opt)
 				if err != nil {
 					log.Fatal(err)
 				}
@@ -73,22 +76,35 @@ func init() {
 			checkError("Cannot write to file", err)
 			file.Close()
 
-			for i, repo := range filteredRepos {
-				owner := *repo.Owner.Login
-				name := *repo.Name
-				_, err := client.Activity.DeleteRepositorySubscription(owner, name)
+			unsubscribeJobs := make(chan *github.Repository)
 
-				if err != nil {
-					log.Printf("(%d/%d) Error: %s, %v", i+1, repoCount, fullName(owner, name), err)
-				} else {
-					log.Printf("(%d/%d) %s", i+1, repoCount, fullName(owner, name))
-				}
+			for w := 1; w <= CONCURRENCY; w++ {
+				go unsubscribeWorker(ctx, client, unsubscribeJobs)
 			}
+
+			for _, repo := range filteredRepos {
+				unsubscribeJobs <- repo
+			}
+			close(unsubscribeJobs)
 		},
 	}
 
 	RootCmd.AddCommand(cmd)
 	cmd.Flags().StringVar(&token, "token", "", "GitHub token")
+}
+
+func unsubscribeWorker(ctx context.Context, client *github.Client, filteredRepos <-chan *github.Repository) {
+	for repo := range filteredRepos {
+		owner := *repo.Owner.Login
+		name := *repo.Name
+		_, err := client.Activity.DeleteRepositorySubscription(ctx, owner, name)
+
+		if err != nil {
+			log.Printf("Error: %s, %v", fullName(owner, name), err)
+		} else {
+			log.Printf("%s", fullName(owner, name))
+		}
+	}
 }
 
 func checkError(message string, err error) {

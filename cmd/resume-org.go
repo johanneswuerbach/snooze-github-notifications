@@ -1,6 +1,7 @@
 package cmd
 
 import (
+	"context"
 	"encoding/csv"
 	"log"
 	"os"
@@ -53,24 +54,39 @@ func init() {
 			repoCount := len(repos)
 			log.Printf("Re-watching repositories %v", repoCount)
 
-			subscribed := true
+			ctx := context.Background()
 
-			for i, line := range repos {
-				owner := line[1]
-				name := line[2]
-				_, _, err := client.Activity.SetRepositorySubscription(owner, name, &github.Subscription{
-					Subscribed: &subscribed,
-				})
+			subscribeJobs := make(chan []string)
 
-				if err != nil {
-					log.Printf("(%d/%d) Error: %s, %v", i+1, repoCount, fullName(owner, name), err)
-				} else {
-					log.Printf("(%d/%d) %s", i+1, repoCount, fullName(owner, name))
-				}
+			for w := 1; w <= CONCURRENCY; w++ {
+				go subscribeWorker(ctx, client, subscribeJobs)
 			}
+
+			for _, line := range repos {
+				subscribeJobs <- line
+			}
+			close(subscribeJobs)
 		},
 	}
 
 	RootCmd.AddCommand(cmd)
 	cmd.Flags().StringVar(&token, "token", "", "GitHub token")
+}
+
+func subscribeWorker(ctx context.Context, client *github.Client, repos <-chan []string) {
+	subscribed := true
+
+	for line := range repos {
+		owner := line[1]
+		name := line[2]
+		_, _, err := client.Activity.SetRepositorySubscription(ctx, owner, name, &github.Subscription{
+			Subscribed: &subscribed,
+		})
+
+		if err != nil {
+			log.Printf("Error: %s, %v", fullName(owner, name), err)
+		} else {
+			log.Printf("%s", fullName(owner, name))
+		}
+	}
 }
