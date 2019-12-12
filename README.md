@@ -4,9 +4,13 @@ Snooze github notification for an entire org and re-watch them once you are read
 
 ## Setup
 
+Requires go 1.13+
+
 ```bash
-git clone
-dep ensure
+git clone https://github.com/johanneswuerbach/snooze-github-notifications
+cd ./snooze-github-notifications
+export GO111MODULE=on
+go build -o snooze-github-notifications main.go
 ```
 
 ## Usage
